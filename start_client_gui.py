@@ -24,5 +24,6 @@ print()
 from client_gui.vpn_client_gui import main
 
 if __name__ == '__main__':
+    # GUI版本保持原样，在GUI界面中处理配置保存
     ft.app(target=main)
 

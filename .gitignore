@@ -29,6 +29,10 @@ env/
 logs/
 *.log
 
+# 加密配置文件
+.drcom/
+*.encrypted
+
 # IDE
 .vscode/
 .idea/

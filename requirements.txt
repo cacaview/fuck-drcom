@@ -6,6 +6,9 @@ requests>=2.31.0
 # GUI 框架 (多平台支持)
 flet>=0.21.0
 
+# 加密库（用于配置文件加密）
+cryptography>=41.0.0
+
 # 日志增强 (可选)
 colorlog>=6.7.0
 
