@@ -46,8 +46,11 @@ RETRY_CONFIG = {
 # VPN服务配置
 VPN_CONFIG = {
     'server_port': 8888,    # VPN服务端口
+    'local_proxy_port': 1080,  # 客户端本地SOCKS5代理端口
     'heartbeat_interval': 30,  # 心跳间隔（秒）
     'buffer_size': 8192,    # 缓冲区大小
+    'connection_timeout': 10,  # 连接超时（秒）
+    'socks5_enabled': True,  # 启用SOCKS5代理（真实流量转发）
 }
 
 # 日志配置

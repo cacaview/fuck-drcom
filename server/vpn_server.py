@@ -1,5 +1,5 @@
 """
-VPN服务�?- 提供网络共享服务
+VPN服务器 - 提供网络共享服务
 """
 
 import socket
@@ -9,17 +9,18 @@ import struct
 from common.drcom_login import DrcomLogin
 from common.config import VPN_CONFIG, RETRY_CONFIG
 from common.logger import Logger
+from common.socks5_proxy import Socks5ProxyHandler
 
 
 class VPNServer:
-    """VPN服务�?""
+    """VPN服务器"""
     
     def __init__(self, username, password, port=None):
         """
-        初始化VPN服务�?
+        初始化VPN服务器
         
         Args:
-            username: Dr.COM用户�?
+            username: Dr.COM用户名
             password: Dr.COM密码
             port: 监听端口
         """
@@ -38,7 +39,7 @@ class VPNServer:
         self.heartbeat_thread = None
         
     def start(self):
-        """启动服务�?""
+        """启动服务器"""
         self.logger.info("=" * 60)
         self.logger.info("VPN服务器启动中...")
         self.logger.info("=" * 60)
@@ -53,10 +54,10 @@ class VPNServer:
             return False
         
         self.local_ip = login_result['ip']
-        self.logger.info(f"�?登录成功！服务器内网IP: {self.local_ip}")
+        self.logger.info(f"✓ 登录成功！服务器内网IP: {self.local_ip}")
         
         # 第二步：启动监听服务
-        self.logger.info(f"步骤2: 启动VPN服务，监听端�?{self.port}")
+        self.logger.info(f"步骤2: 启动VPN服务，监听端口 {self.port}")
         try:
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -64,12 +65,12 @@ class VPNServer:
             self.server_socket.listen(5)
             
             self.running = True
-            self.logger.info(f"�?VPN服务已启动，监听 0.0.0.0:{self.port}")
+            self.logger.info(f"✓ VPN服务已启动，监听 0.0.0.0:{self.port}")
             self.logger.info("=" * 60)
-            self.logger.info(f"服务器信�?")
+            self.logger.info(f"服务器信息:")
             self.logger.info(f"  内网IP: {self.local_ip}")
             self.logger.info(f"  监听端口: {self.port}")
-            self.logger.info(f"  请在客户端使用以下信息连�?")
+            self.logger.info(f"  请在客户端使用以下信息连接:")
             self.logger.info(f"    服务器IP: {self.local_ip}")
             self.logger.info(f"    端口: {self.port}")
             self.logger.info("=" * 60)
@@ -88,13 +89,13 @@ class VPNServer:
         return True
     
     def _accept_clients(self):
-        """接受客户端连�?""
+        """接受客户端连接"""
         self.logger.info("开始接受客户端连接...")
         
         while self.running:
             try:
                 client_socket, client_address = self.server_socket.accept()
-                self.logger.info(f"收到来自 {client_address} 的连接请�?)
+                self.logger.info(f"收到来自 {client_address} 的连接请求")
                 
                 # 为每个客户端创建处理线程
                 client_thread = threading.Thread(
@@ -110,7 +111,7 @@ class VPNServer:
     
     def _handle_client(self, client_socket, client_address):
         """
-        处理客户端连�?
+        处理客户端连接
         
         Args:
             client_socket: 客户端socket
@@ -119,8 +120,8 @@ class VPNServer:
         client_id = f"{client_address[0]}:{client_address[1]}"
         
         try:
-            # 接收客户端握手信�?
-            self.logger.info(f"[{client_id}] 等待客户端握�?..")
+            # 接收客户端握手信息
+            self.logger.info(f"[{client_id}] 等待客户端握手...")
             data = client_socket.recv(1024).decode('utf-8')
             
             if not data.startswith('HELLO:'):
@@ -132,7 +133,7 @@ class VPNServer:
             client_ip = data.split(':', 1)[1].strip()
             self.logger.info(f"[{client_id}] 客户端握手成功，客户端IP: {client_ip}")
             
-            # 保存客户端信�?
+            # 保存客户端信息
             self.clients[client_id] = {
                 'socket': client_socket,
                 'address': client_address,
@@ -141,13 +142,13 @@ class VPNServer:
                 'last_heartbeat': time.time()
             }
             
-            # 发送确�?
+            # 发送确认
             client_socket.send(b'OK')
             
-            # 提示：客户端连接后，服务器需要重新登录（会被客户端踢下线�?
+            # 提示：客户端连接后，服务器需要重新登录（会被客户端踢下线）
             self.logger.warning(f"[{client_id}] 客户端连接成功！")
             self.logger.warning(f"[{client_id}] 注意: 客户端可能正在登录，服务器将被踢下线...")
-            self.logger.info(f"[{client_id}] 等待客户端报告其IP并尝试重新登�?..")
+            self.logger.info(f"[{client_id}] 等待客户端报告其IP并尝试重新登录...")
             
             # 等待客户端发送IP报告
             report_data = client_socket.recv(1024).decode('utf-8')
@@ -156,11 +157,11 @@ class VPNServer:
                 self.logger.info(f"[{client_id}] 收到客户端IP报告: {reported_ip}")
                 
                 # 尝试重新登录（抢回网络）
-                self.logger.info(f"[{client_id}] 开始重新登录网�?..")
+                self.logger.info(f"[{client_id}] 开始重新登录网络...")
                 login_result = self.login_manager.login_with_retry()
                 
                 if login_result['success']:
-                    self.logger.info(f"[{client_id}] �?重新登录成功�?)
+                    self.logger.info(f"[{client_id}] ✓ 重新登录成功！")
                     client_socket.send(b'LOGIN_SUCCESS')
                     
                     # 开始提供VPN服务
@@ -182,39 +183,27 @@ class VPNServer:
     
     def _provide_vpn_service(self, client_socket, client_id):
         """
-        为客户端提供VPN服务（简单的SOCKS5代理�?
+        为客户端提供VPN服务（SOCKS5代理）
         
         Args:
             client_socket: 客户端socket
             client_id: 客户端ID
         """
-        self.logger.info(f"[{client_id}] 开始提供VPN服务")
+        self.logger.info(f"[{client_id}] 开始提供VPN服务（SOCKS5代理）")
+        self.logger.info(f"[{client_id}] 已实现真实的流量转发功能！")
         
         try:
-            while self.running:
-                # 接收客户端请�?
-                data = client_socket.recv(VPN_CONFIG['buffer_size'])
-                
-                if not data:
-                    self.logger.info(f"[{client_id}] 客户端断开连接")
-                    break
-                
-                # 更新心跳时间
-                if client_id in self.clients:
-                    self.clients[client_id]['last_heartbeat'] = time.time()
-                
-                # 处理心跳�?
-                if data == b'HEARTBEAT':
-                    client_socket.send(b'HEARTBEAT_ACK')
-                    continue
-                
-                # 处理代理请求
-                # 这里实现简单的流量转发
-                self.logger.debug(f"[{client_id}] 收到数据: {len(data)} 字节")
-                
-                # TODO: 实现完整的代理逻辑
-                # 目前只是简单的回显
-                client_socket.send(b'OK')
+            # 使用SOCKS5代理处理器来处理所有代理请求
+            # 这将提供真实的流量转发功能，而不是模拟
+            handler = Socks5ProxyHandler(client_socket, client_id, self.logger)
+            
+            # 启动代理服务（阻塞直到连接结束）
+            success = handler.handle()
+            
+            if success:
+                self.logger.info(f"[{client_id}] VPN服务正常结束")
+            else:
+                self.logger.warning(f"[{client_id}] VPN服务异常结束")
                 
         except Exception as e:
             self.logger.error(f"[{client_id}] VPN服务出错: {e}")
@@ -225,17 +214,17 @@ class VPNServer:
                 client_socket.close()
             except:
                 pass
-            self.logger.info(f"[{client_id}] 连接已关�?)
+            self.logger.info(f"[{client_id}] 连接已关闭")
     
     def _heartbeat_monitor(self):
         """心跳监控线程"""
-        self.logger.info("心跳监控线程已启�?)
+        self.logger.info("心跳监控线程已启动")
         
         while self.running:
             try:
                 time.sleep(VPN_CONFIG['heartbeat_interval'])
                 
-                # 检查所有客户端的心�?
+                # 检查所有客户端的心跳
                 current_time = time.time()
                 timeout_clients = []
                 
@@ -244,7 +233,7 @@ class VPNServer:
                     if current_time - last_heartbeat > VPN_CONFIG['heartbeat_interval'] * 2:
                         timeout_clients.append(client_id)
                 
-                # 清理超时客户�?
+                # 清理超时客户端
                 for client_id in timeout_clients:
                     self.logger.warning(f"[{client_id}] 心跳超时，断开连接")
                     try:
@@ -253,16 +242,16 @@ class VPNServer:
                         pass
                     del self.clients[client_id]
                 
-                # 显示当前连接状�?
+                # 显示当前连接状态
                 if self.clients:
-                    self.logger.debug(f"当前连接�? {len(self.clients)}")
+                    self.logger.debug(f"当前连接数: {len(self.clients)}")
                 
             except Exception as e:
                 self.logger.error(f"心跳监控出错: {e}")
     
     def stop(self):
-        """停止服务�?""
-        self.logger.info("正在停止服务�?..")
+        """停止服务器"""
+        self.logger.info("正在停止服务器...")
         self.running = False
         
         # 关闭所有客户端连接
@@ -285,15 +274,15 @@ class VPNServer:
 
 
 def main():
-    """主函�?""
+    """主函数"""
     import sys
     import signal
     
     if len(sys.argv) < 3:
         print("=" * 60)
-        print("Dr.COM VPN服务�?)
+        print("Dr.COM VPN服务器")
         print("=" * 60)
-        print("用法: python vpn_server.py <用户�? <密码> [端口]")
+        print("用法: python vpn_server.py <用户名> <密码> [端口]")
         print("示例: python vpn_server.py MR646C80105795 mypassword 8888")
         print("=" * 60)
         sys.exit(1)
@@ -302,27 +291,27 @@ def main():
     password = sys.argv[2]
     port = int(sys.argv[3]) if len(sys.argv) > 3 else VPN_CONFIG['server_port']
     
-    # 创建服务器实�?
+    # 创建服务器实例
     server = VPNServer(username, password, port)
     
     # 注册信号处理
     def signal_handler(sig, frame):
-        print("\n收到退出信号，正在关闭服务�?..")
+        print("\n收到退出信号，正在关闭服务器...")
         server.stop()
         sys.exit(0)
     
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    # 启动服务�?
+    # 启动服务器
     if server.start():
         print("服务器运行中，按 Ctrl+C 停止...")
-        # 保持主线程运�?
+        # 保持主线程运行
         try:
             while server.running:
                 time.sleep(1)
         except KeyboardInterrupt:
-            print("\n正在关闭服务�?..")
+            print("\n正在关闭服务器...")
             server.stop()
     else:
         print("服务器启动失败！")
@@ -331,4 +320,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
