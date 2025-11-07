@@ -3,8 +3,8 @@
 # HTTP 请求库
 requests>=2.31.0
 
-# GUI 框架 (多平台支持)
-flet>=0.21.0
+# GUI 框架 (多平台支持，包含桌面和Web支持)
+flet[all]>=0.28.0
 
 # 加密库（用于配置文件加密）
 cryptography>=41.0.0
