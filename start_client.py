@@ -76,8 +76,9 @@ def main():
     server_ip = config['server_ip']
     server_port = config.get('port', VPN_CONFIG['server_port'])
     isp = config.get('isp', '中国电信')  # 默认中国电信
+    connection_type = config.get('connection_type', 'auto')  # 默认自动检测
     
-    client = VPNClient(username, password, server_ip, server_port, isp)
+    client = VPNClient(username, password, server_ip, server_port, isp, connection_type=connection_type)
     
     # 注册信号处理
     def signal_handler(sig, frame):

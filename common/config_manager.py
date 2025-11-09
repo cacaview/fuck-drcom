@@ -244,6 +244,40 @@ def interactive_input() -> dict:
         else:
             print("❌ 无效选择，请输入 1-5！")
     
+    # 选择连接方式
+    print("\n选择连接方式:")
+    print("  1. 自动检测 (默认)")
+    print("  2. WiFi 连接")
+    print("  3. 有线连接")
+    print()
+    print("说明:")
+    print("  - WiFi连接：需要获取MAC地址和AC信息，适用于校园WiFi")
+    print("  - 有线连接：跳过WiFi参数检测，直接登录，速度更快")
+    print("  - 自动检测：尝试获取WiFi参数，如果失败则使用默认值")
+    
+    connection_options = {
+        '1': 'auto',
+        '2': 'wifi',
+        '3': 'wired'
+    }
+    
+    connection_names = {
+        'auto': '自动检测',
+        'wifi': 'WiFi连接',
+        'wired': '有线连接'
+    }
+    
+    while True:
+        conn_choice = input("请选择 [1]: ").strip()
+        if not conn_choice:
+            conn_choice = '1'
+        if conn_choice in connection_options:
+            config['connection_type'] = connection_options[conn_choice]
+            print(f"✓ 已选择: {connection_names[config['connection_type']]}")
+            break
+        else:
+            print("❌ 无效选择，请输入 1-3！")
+    
     return config
 
 

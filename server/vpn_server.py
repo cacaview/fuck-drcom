@@ -15,7 +15,7 @@ from common.socks5_proxy import Socks5ProxyHandler
 class VPNServer:
     """VPN服务器"""
     
-    def __init__(self, username, password, port=None, isp='中国电信'):
+    def __init__(self, username, password, port=None, isp='中国电信', connection_type='auto'):
         """
         初始化VPN服务器
         
@@ -24,14 +24,16 @@ class VPNServer:
             password: Dr.COM密码
             port: 监听端口
             isp: 运营商类型（中国电信/中国移动/中国联通/中国广电/职工账号）
+            connection_type: 连接方式（auto/wifi/wired）
         """
         self.username = username
         self.password = password
         self.port = port or VPN_CONFIG['server_port']
         self.isp = isp
+        self.connection_type = connection_type
         self.logger = Logger('VPNServer', 'vpn_server')
         
-        self.login_manager = DrcomLogin(username, password, isp)
+        self.login_manager = DrcomLogin(username, password, isp, connection_type)
         self.server_socket = None
         self.running = False
         self.clients = {}  # {client_id: client_info}
