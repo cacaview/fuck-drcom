@@ -16,7 +16,7 @@ import json
 import getpass
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
 import base64
 
@@ -50,7 +50,7 @@ class ConfigManager:
         Returns:
             bytes: 派生的密钥
         """
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
@@ -218,6 +218,33 @@ def interactive_input() -> dict:
                 print("❌ 两次输入的密码不一致，请重新输入！")
         else:
             print("❌ 密码不能为空！")
+    
+    # 选择运营商
+    print("\n选择运营商类型:")
+    print("  1. 中国电信 (默认)")
+    print("  2. 中国移动")
+    print("  3. 中国联通")
+    print("  4. 中国广电")
+    print("  5. 职工账号")
+    
+    isp_options = {
+        '1': '中国电信',
+        '2': '中国移动',
+        '3': '中国联通',
+        '4': '中国广电',
+        '5': '职工账号'
+    }
+    
+    while True:
+        isp_choice = input("请选择 [1]: ").strip()
+        if not isp_choice:
+            isp_choice = '1'
+        if isp_choice in isp_options:
+            config['isp'] = isp_options[isp_choice]
+            print(f"✓ 已选择: {config['isp']}")
+            break
+        else:
+            print("❌ 无效选择，请输入 1-5！")
     
     return config
 

@@ -27,7 +27,7 @@ def main():
     print("=" * 70)
     print("本软件仅供学习和技术研究使用。")
     print("使用本软件即表示您已阅读、理解并同意遵守完整的《免责声明》。")
-    print("详见项目根目录下的"免责声明.md"文件。")
+    print('详见项目根目录下的"免责声明.md"文件。')
     print()
     print("使用本软件产生的一切法律问题和后果由使用者自行承担，")
     print("开发者不承担任何法律义务。")
@@ -74,8 +74,9 @@ def main():
     username = config['username']
     password = config['password']
     port = config.get('port', VPN_CONFIG['server_port'])
+    isp = config.get('isp', '中国电信')  # 默认中国电信
     
-    server = VPNServer(username, password, port)
+    server = VPNServer(username, password, port, isp)
     
     # 注册信号处理
     def signal_handler(sig, frame):
@@ -103,4 +104,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 

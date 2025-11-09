@@ -16,7 +16,7 @@ from common.logger import Logger
 class VPNClient:
     """VPN客户端"""
     
-    def __init__(self, username, password, server_ip, server_port=None, local_proxy_port=1080):
+    def __init__(self, username, password, server_ip, server_port=None, isp='中国电信', local_proxy_port=1080):
         """
         初始化VPN客户端
         
@@ -25,16 +25,18 @@ class VPNClient:
             password: Dr.COM密码
             server_ip: 服务器IP地址
             server_port: 服务器端口
+            isp: 运营商类型，如'中国电信'、'中国联通'等
             local_proxy_port: 本地SOCKS5代理端口
         """
         self.username = username
         self.password = password
         self.server_ip = server_ip
         self.server_port = server_port or VPN_CONFIG['server_port']
+        self.isp = isp
         self.local_proxy_port = local_proxy_port
         self.logger = Logger('VPNClient', 'vpn_client')
         
-        self.login_manager = DrcomLogin(username, password)
+        self.login_manager = DrcomLogin(username, password, isp)
         self.server_connection = None  # 到VPN服务器的主连接
         self.running = False
         self.local_ip = None

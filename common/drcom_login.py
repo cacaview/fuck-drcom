@@ -24,16 +24,18 @@ from .logger import Logger
 class DrcomLogin:
     """Dr.COM登录管理器"""
     
-    def __init__(self, username, password):
+    def __init__(self, username, password, isp='中国电信'):
         """
         初始化登录管理器
         
         Args:
             username: 用户名
             password: 密码
+            isp: 运营商类型，可选值：'中国电信'、'中国移动'、'中国联通'、'中国广电'、'职工账号'
         """
         self.username = username
         self.password = password
+        self.isp = isp
         self.session = requests.Session()
         self.logger = Logger('DrcomLogin', 'drcom_login')
         
@@ -57,24 +59,47 @@ class DrcomLogin:
         """
         try:
             # 尝试通过访问认证页面获取IP
-            response = self.session.get(self.base_url, timeout=5)
+            response = self.session.get(self.base_url, timeout=10)
             
-            # 从页面中提取IP信息
-            # 查找 v4ip='172.21.77.34' 这样的模式
+            # 方法1: 查找 v4ip='172.21.77.34' 这样的模式
             ip_pattern = r"v4ip='(\d+\.\d+\.\d+\.\d+)'"
             match = re.search(ip_pattern, response.text)
             if match:
                 ip = match.group(1)
-                self.logger.info(f"从认证页面获取到IP: {ip}")
+                self.logger.info(f"从v4ip获取到IP: {ip}")
                 return ip
             
-            # 备用方案：从lip变量获取
+            # 方法2: 从lip变量获取
             lip_pattern = r"lip='(\d+\.\d+\.\d+\.\d+)'"
             match = re.search(lip_pattern, response.text)
             if match:
                 ip = match.group(1)
-                self.logger.info(f"从lip变量获取到IP: {ip}")
+                self.logger.info(f"从lip获取到IP: {ip}")
                 return ip
+            
+            # 方法3: 从URL参数中获取 (ip=172.21.77.57)
+            url_ip_pattern = r'[?&]ip=(\d+\.\d+\.\d+\.\d+)'
+            match = re.search(url_ip_pattern, response.text)
+            if match:
+                ip = match.group(1)
+                self.logger.info(f"从URL参数获取到IP: {ip}")
+                return ip
+            
+            # 方法4: 查找所有内网IP地址，选择最可能的一个
+            # 内网IP通常以 10.x, 172.16-31.x, 或 192.168.x 开头
+            all_ips = re.findall(r'\b(\d+\.\d+\.\d+\.\d+)\b', response.text)
+            for ip in all_ips:
+                # 过滤掉服务器自己的IP和回环地址
+                if ip.startswith('10.252.252.'):
+                    continue
+                if ip.startswith('127.'):
+                    continue
+                # 检查是否为内网IP
+                if (ip.startswith('10.') or 
+                    ip.startswith('192.168.') or 
+                    (ip.startswith('172.') and 16 <= int(ip.split('.')[1]) <= 31)):
+                    self.logger.info(f"从页面内容获取到IP: {ip}")
+                    return ip
                 
         except Exception as e:
             self.logger.error(f"获取IP地址失败: {e}")
@@ -153,60 +178,98 @@ class DrcomLogin:
             dict: 登录结果，包含 'success'(bool), 'message'(str), 'ip'(str)
         """
         try:
-            self.logger.info(f"开始登录，用户名: {self.username}")
+            self.logger.info(f"开始登录，用户名: {self.username}, 运营商: {self.isp}")
             
-            # 准备登录数据
-            login_data = {
-                DRCOM_CONFIG['user_field']: self.username,
-                DRCOM_CONFIG['pass_field']: self.password,
-                'callback': 'dr1001',
+            # 获取本机IP地址
+            local_ip = self.get_local_ip()
+            if not local_ip:
+                self.logger.error("无法获取本机IP地址")
+                return {
+                    'success': False,
+                    'message': '无法获取本机IP地址',
+                    'ip': None
+                }
+            
+            # 构造用户账号（格式：,0,username@isp_code）
+            isp_code = DRCOM_CONFIG['isp_mapping'].get(self.isp, 'telecom')
+            if isp_code:
+                user_account = f',0,{self.username}@{isp_code}'
+            else:
+                user_account = f',0,{self.username}'
+            
+            self.logger.info(f"user_account: {user_account}, local_ip: {local_ip}")
+            
+            # 准备登录参数（所有参数通过URL query string传递）
+            params = {
+                'callback': 'dr1003',
                 'login_method': '1',
-                'wlan_user_ip': '',
+                'user_account': user_account,
+                'user_password': self.password,
+                'wlan_user_ip': local_ip,
                 'wlan_user_ipv6': '',
                 'wlan_user_mac': '000000000000',
                 'wlan_ac_ip': '',
                 'wlan_ac_name': '',
-                'jsVersion': '4.X',
-                # 使用配置的设备类型（固定为PC设备类型，避免设备冲突）
+                'jsVersion': DRCOM_CONFIG['js_version'],
                 'terminal_type': DRCOM_CONFIG['terminal_type'],
-                'lang': 'zh',
+                'lang': 'zh-cn',
                 'v': str(int(time.time() * 1000))
             }
             
-            # 添加URL参数
-            params = DRCOM_CONFIG['login_params'].copy()
-            
-            # 发送登录请求
+            # 发送登录请求（使用GET方法）
             response = self.session.get(
                 self.eportal_url,
                 params=params,
-                data=login_data,
                 timeout=10
             )
             
             self.logger.debug(f"登录响应: {response.text[:300]}")
             
-            # 解析响应
-            if '成功' in response.text or 'success' in response.text.lower():
-                ip = self.get_local_ip()
-                self.logger.info(f"登录成功！内网IP: {ip}")
+            # 解析JSONP响应
+            # 格式：dr1003({"result":1,"message":"success",...})
+            jsonp_pattern = r'dr\d+\((.*)\)'
+            match = re.search(jsonp_pattern, response.text)
+            
+            if match:
+                import json
+                try:
+                    data = json.loads(match.group(1))
+                    result = data.get('result', 0)
+                    message = data.get('message', '未知错误')
+                    
+                    if result == 1:
+                        self.logger.info(f"登录成功！内网IP: {local_ip}")
                 
-                # 验证是否真的可以上网
-                if self.test_internet_connection():
-                    return {
-                        'success': True,
-                        'message': '登录成功，网络可用',
-                        'ip': ip
-                    }
-                else:
-                    self.logger.warning("登录成功但无法访问互联网，可能被其他设备踢下线")
+                        # 验证是否真的可以上网
+                        if self.test_internet_connection():
+                            return {
+                                'success': True,
+                                'message': '登录成功，网络可用',
+                                'ip': local_ip
+                            }
+                        else:
+                            self.logger.warning("登录成功但无法访问互联网，可能被其他设备踢下线")
+                            return {
+                                'success': False,
+                                'message': '登录成功但无法访问互联网',
+                                'ip': local_ip
+                            }
+                    else:
+                        self.logger.error(f"登录失败: {message}")
+                        return {
+                            'success': False,
+                            'message': message,
+                            'ip': None
+                        }
+                except json.JSONDecodeError:
+                    self.logger.error(f"无法解析登录响应: {response.text[:200]}")
                     return {
                         'success': False,
-                        'message': '登录成功但无法访问互联网',
-                        'ip': ip
+                        'message': '响应格式错误',
+                        'ip': None
                     }
             else:
-                # 尝试从响应中提取错误信息
+                # 无法解析响应
                 error_msg = self._extract_error_message(response.text)
                 self.logger.error(f"登录失败: {error_msg}")
                 return {
@@ -267,13 +330,16 @@ class DrcomLogin:
         try:
             self.logger.info("开始注销")
             
-            params = DRCOM_CONFIG['logout_params'].copy()
-            params['callback'] = 'dr1001'
-            params['jsVersion'] = '4.X'
-            params['v'] = str(int(time.time() * 1000))
+            logout_url = f"{self.base_url}:{DRCOM_CONFIG['eportal_port']}{DRCOM_CONFIG['logout_path']}"
+            
+            params = {
+                'callback': 'dr1004',
+                'jsVersion': DRCOM_CONFIG['js_version'],
+                'v': str(int(time.time() * 1000))
+            }
             
             response = self.session.get(
-                self.eportal_url,
+                logout_url,
                 params=params,
                 timeout=10
             )

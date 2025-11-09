@@ -1,0 +1,45 @@
+[project]
+name = "drcom-vpn"
+version = "1.3.1"
+description = "Dr.COM VPN 网络共享系统 - 绕过校园网设备限制"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [
+    { name = "DrCOM VPN Team" }
+]
+keywords = ["drcom", "vpn", "network", "proxy", "socks5"]
+
+dependencies = [
+    "requests>=2.31.0",
+    "flet>=0.21.0",
+    "cryptography>=41.0.0",
+    "colorlog>=6.7.0",
+    "netifaces>=0.11.0",
+    "tqdm>=4.66.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/drcom-vpn"
+Documentation = "https://github.com/yourusername/drcom-vpn/blob/main/README.md"
+Repository = "https://github.com/yourusername/drcom-vpn"
+
+[project.scripts]
+drcom-server = "start_server:main"
+drcom-client = "start_client:main"
+drcom-client-gui = "start_client_gui:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["client", "client_gui", "common", "server"]
+
+[dependency-groups]
+dev = []
+
+[tool.ruff]
+line-length = 120
+target-version = "py38"
+

@@ -15,24 +15,23 @@
 DRCOM_CONFIG = {
     'base_url': 'http://10.252.252.5',
     'eportal_port': 801,
-    'login_path': '/eportal/',
-    'login_params': {
-        'c': 'ACSetting',
-        'a': 'Login',
-    },
-    'logout_params': {
-        'c': 'ACSetting',
-        'a': 'Logout',
-        'ver': '1.0',
-    },
+    'login_path': '/eportal/portal/login',  # 修复：实际的登录路径
+    'logout_path': '/eportal/portal/logout',  # 注销路径
     'status_path': '/drcom/chkstatus',
-    'user_field': 'DDDDD',  # 账号字段名
-    'pass_field': 'upass',  # 密码字段名
+    # 运营商代码映射
+    'isp_mapping': {
+        '中国电信': 'telecom',
+        '中国移动': 'cmcc',
+        '中国联通': 'unicom',
+        '中国广电': 'cbn',
+        '职工账号': '',  # 职工账号不需要后缀
+    },
     # 设备类型配置
     # ⚠️ 重要：固定为PC设备类型('1')，避免被其他设备踢下线
     # 不管实际是什么类型的设备（手机、平板、PC），都向验证服务器提交PC设备类型
     # 设备类型：'1'=PC, '2'=手机, '3'=其他
     'terminal_type': '1',  # 固定为PC设备类型
+    'js_version': '4.2.1',  # JS版本
 }
 
 # 登录重试配置
