@@ -56,7 +56,8 @@ class DrcomLogin:
         self.wifi_params = {
             'wlan_user_mac': '000000000000',
             'wlan_ac_ip': '',
-            'wlan_ac_name': ''
+            'wlan_ac_name': '',
+            'ssid': ''
         }
     
     def get_wifi_params_from_redirect(self):
@@ -193,6 +194,21 @@ class DrcomLogin:
             if match:
                 self.wifi_params['wlan_ac_name'] = match.group(1)
                 self.logger.debug(f"提取到AC名称: {match.group(1)}")
+                break
+        
+        # 提取SSID
+        ssid_patterns = [
+            r'ssid=([^&]+)',
+            r'wlan_user_ssid=([^&]+)',
+            r'essid=([^&]+)'
+        ]
+        for pattern in ssid_patterns:
+            match = re.search(pattern, url, re.IGNORECASE)
+            if match:
+                ssid = match.group(1)
+                if ssid:  # 确保SSID不为空
+                    self.wifi_params['ssid'] = ssid
+                    self.logger.debug(f"提取到SSID: {ssid}")
                 break
         
     def get_local_ip(self):
@@ -382,7 +398,8 @@ class DrcomLogin:
             self.logger.info(f"user_account: {user_account}, local_ip: {local_ip}")
             self.logger.info(f"WiFi参数 - MAC: {self.wifi_params['wlan_user_mac']}, "
                            f"AC IP: {self.wifi_params['wlan_ac_ip']}, "
-                           f"AC Name: {self.wifi_params['wlan_ac_name']}")
+                           f"AC Name: {self.wifi_params['wlan_ac_name']}, "
+                           f"SSID: {self.wifi_params['ssid']}")
             
             # 准备登录参数（所有参数通过URL query string传递）
             params = {
@@ -430,26 +447,62 @@ class DrcomLogin:
                     
                     if result == 1:
                         self.logger.info(f"✓ Portal协议认证成功！内网IP: {local_ip}")
-                        self.logger.info(f"等待网络建立，持续测试连通性...")
+                        self.logger.info(f"验证在线状态...")
                 
-                        # Portal认证成功后，持续ping直到网络真正可用
+                        # Portal认证成功后，通过chkstatus接口验证是否真正在线
                         # 最多尝试10次，每次间隔2秒（共20秒）
-                        if self.test_internet_connection(max_retries=10, retry_interval=2):
-                            return {
-                                'success': True,
-                                'message': '登录成功，网络可用',
-                                'ip': local_ip
-                            }
-                        else:
-                            self.logger.warning("Portal认证成功，但网络连通性测试失败")
-                            self.logger.warning("这可能是正常的（双网卡环境、特定路由等）")
-                            # 即使ping失败，Portal认证成功也应该返回成功
-                            # 因为在双网卡环境下ping可能走错网卡
-                            return {
-                                'success': True,
-                                'message': 'Portal认证成功（网络测试未通过，可能是环境配置原因）',
-                                'ip': local_ip
-                            }
+                        for attempt in range(1, 11):
+                            try:
+                                time.sleep(2)  # 等待2秒让网络建立
+                                status = self.check_network_status()
+                                
+                                if status['online']:
+                                    self.logger.info(f"✓ 在线状态确认成功 (第{attempt}次尝试)")
+                                    self.logger.info(f"等待网络建立，测试连通性...")
+                                    
+                                    # 确认在线后，再测试网络连通性
+                                    if self.test_internet_connection(max_retries=5, retry_interval=2):
+                                        return {
+                                            'success': True,
+                                            'message': '登录成功，网络可用',
+                                            'ip': local_ip
+                                        }
+                                    else:
+                                        self.logger.warning("在线状态确认成功，但网络连通性测试失败")
+                                        self.logger.warning("这可能是正常的（双网卡环境、特定路由等）")
+                                        # 在线状态确认成功就应该返回成功
+                                        return {
+                                            'success': True,
+                                            'message': '登录成功（在线状态已确认）',
+                                            'ip': local_ip
+                                        }
+                                else:
+                                    self.logger.debug(f"第{attempt}次在线状态检查：未在线，继续等待...")
+                                    if attempt >= 10:
+                                        self.logger.warning("Portal认证成功，但在线状态验证失败")
+                                        self.logger.warning("可能需要重新登录")
+                                        return {
+                                            'success': False,
+                                            'message': 'Portal认证成功但未真正上线',
+                                            'ip': local_ip
+                                        }
+                            except Exception as e:
+                                self.logger.debug(f"第{attempt}次在线状态检查失败: {e}")
+                                if attempt >= 10:
+                                    # 如果在线状态检查失败，降级使用ping测试
+                                    self.logger.warning("在线状态检查失败，尝试使用ping测试...")
+                                    if self.test_internet_connection(max_retries=5, retry_interval=2):
+                                        return {
+                                            'success': True,
+                                            'message': '登录成功，网络可用',
+                                            'ip': local_ip
+                                        }
+                                    else:
+                                        return {
+                                            'success': False,
+                                            'message': 'Portal认证成功但网络验证失败',
+                                            'ip': local_ip
+                                        }
                     else:
                         self.logger.error(f"登录失败: {message}")
                         return {
