@@ -51,6 +51,7 @@ class DrcomLogin:
         
         self.base_url = DRCOM_CONFIG['base_url']
         self.eportal_url = f"{self.base_url}:{DRCOM_CONFIG['eportal_port']}{DRCOM_CONFIG['login_path']}"
+        self.portal_api = f"{self.base_url}:{DRCOM_CONFIG['eportal_port']}/eportal/portal/"
         
         # WiFi环境参数
         self.wifi_params = {
@@ -58,6 +59,11 @@ class DrcomLogin:
             'wlan_ac_ip': '',
             'wlan_ac_name': '',
             'ssid': ''
+        }
+        
+        # 服务器配置（从loadConfig API获取）
+        self.server_config = {
+            'check_online_method': 0,  # 默认使用方式0
         }
     
     def get_wifi_params_from_redirect(self):
@@ -164,6 +170,7 @@ class DrcomLogin:
         for pattern in mac_patterns:
             match = re.search(pattern, url, re.IGNORECASE)
             if match:
+                # MAC地址需要转为小写去除分隔符后存储，但在使用时会转为大写
                 mac = match.group(1).replace('-', '').replace(':', '').lower()
                 if mac and mac != '000000000000':
                     self.wifi_params['wlan_user_mac'] = mac
@@ -267,22 +274,158 @@ class DrcomLogin:
         
         return None
     
-    def check_network_status(self):
+    @staticmethod
+    def ip_to_int(ip_str):
+        """
+        将点分十进制IP地址转换为整数
+        
+        Args:
+            ip_str: IP地址字符串，如 '172.19.214.18'
+        
+        Returns:
+            int: IP地址的整数表示
+        """
+        try:
+            parts = ip_str.split('.')
+            return (int(parts[0]) << 24 | int(parts[1]) << 16 | 
+                    int(parts[2]) << 8 | int(parts[3])) & 0xFFFFFFFF
+        except:
+            return 0
+    
+    @staticmethod
+    def base64_encode(s):
+        """
+        Base64编码（用于loadConfig API）
+        
+        Args:
+            s: 要编码的字符串
+        
+        Returns:
+            str: Base64编码后的字符串
+        """
+        import base64
+        if not s:
+            return ''
+        return base64.b64encode(s.encode('utf-8')).decode('utf-8')
+    
+    def get_page_config(self, local_ip):
+        """
+        获取页面配置（loadConfig API）
+        
+        模拟JS的page.getPageInfo()逻辑，获取服务器配置参数，
+        特别是check_online_method参数，用于确定在线状态检查方式
+        
+        Args:
+            local_ip: 本地IP地址
+        
+        Returns:
+            dict: 服务器配置，包含check_online_method等参数
+        """
+        try:
+            url = f"{self.portal_api}page/loadConfig"
+            params = {
+                'callback': 'dr1001',
+                'program_index': '',
+                'wlan_vlan_id': '0',
+                'wlan_user_ip': self.base64_encode(local_ip),
+                'wlan_user_ipv6': '',
+                'wlan_user_ssid': self.wifi_params['ssid'],
+                'wlan_user_areaid': '',
+                'wlan_ac_ip': self.base64_encode(self.wifi_params['wlan_ac_ip']),
+                'wlan_ap_mac': '000000000000',
+                'gw_id': '000000000000',
+                'jsVersion': DRCOM_CONFIG['js_version'],
+                'v': str(int(time.time() * 1000))
+            }
+            
+            self.logger.debug(f"请求页面配置: {url}")
+            response = self.session.get(url, params=params, timeout=10)
+            
+            self.logger.debug(f"页面配置响应: {response.text[:200]}")
+            
+            # 解析JSONP响应
+            jsonp_pattern = r'dr\d+\((.*)\)'
+            match = re.search(jsonp_pattern, response.text)
+            
+            if match:
+                import json
+                data = json.loads(match.group(1))
+                
+                if data.get('result') == 1 or data.get('result') == 'ok':
+                    config_data = data.get('data', {})
+                    
+                    # 提取关键配置
+                    self.server_config['check_online_method'] = int(config_data.get('check_online_method', 0))
+                    
+                    self.logger.info(f"✓ 获取页面配置成功")
+                    self.logger.info(f"  在线状态检查方式: {self.server_config['check_online_method']} "
+                                   f"({'Radius接口' if self.server_config['check_online_method'] == 1 else '内核接口'})")
+                    
+                    return self.server_config
+                else:
+                    self.logger.warning(f"获取页面配置失败: {data.get('msg', '未知错误')}")
+            
+        except Exception as e:
+            self.logger.error(f"获取页面配置异常: {e}")
+        
+        # 返回默认配置
+        return self.server_config
+    
+    def check_network_status(self, local_ip=None):
         """
         检查网络状态
+        
+        根据服务器配置的check_online_method选择不同的检查方式：
+        - 方式0（默认）: 使用 /drcom/chkstatus 接口
+        - 方式1（Radius）: 使用 /eportal/portal/online_list 接口
+        
+        Args:
+            local_ip: 本地IP地址（方式1需要）
         
         Returns:
             dict: 状态信息，包含 'online'(bool) 和 'message'(str)
         """
         try:
-            # 方法1: 访问chkstatus接口
-            status_url = urljoin(self.base_url, DRCOM_CONFIG['status_path'])
-            response = self.session.get(status_url, timeout=5)
+            check_method = self.server_config.get('check_online_method', 0)
+            
+            if check_method == 1:
+                # 方式1: Radius接口 - online_list
+                if not local_ip:
+                    self.logger.error("Radius方式检查在线状态需要提供local_ip参数")
+                    return {'online': False, 'message': '缺少参数'}
+                
+                status_url = f"{self.portal_api}online_list"
+                params = {
+                    'callback': 'dr1002',
+                    'user_account': '',
+                    'user_password': '',
+                    'wlan_user_mac': self.wifi_params['wlan_user_mac'].upper(),  # MAC需要转大写
+                    'wlan_user_ip': str(self.ip_to_int(local_ip)),  # IP转十进制
+                    'curr_user_ip': str(self.ip_to_int(local_ip)),   # IP转十进制
+                    'jsVersion': DRCOM_CONFIG['js_version'],
+                    'v': str(int(time.time() * 1000))
+                }
+                
+                self.logger.debug(f"状态查询(Radius方式): {status_url}")
+                self.logger.debug(f"参数: MAC={params['wlan_user_mac']}, IP={local_ip}({params['wlan_user_ip']})")
+                
+            else:
+                # 方式0: 内核接口 - chkstatus
+                status_url = urljoin(self.base_url, DRCOM_CONFIG['status_path'])
+                params = {
+                    'callback': 'dr1002',
+                    'jsVersion': DRCOM_CONFIG['js_version'],
+                    'v': str(int(time.time() * 1000))
+                }
+                
+                self.logger.debug(f"状态查询(内核方式): {status_url}")
+            
+            response = self.session.get(status_url, params=params, timeout=5)
             
             self.logger.debug(f"状态查询响应: {response.text[:200]}")
             
             # 解析JSONP响应
-            # 格式通常是: dr1001({...})
+            # 格式通常是: dr1002({...})
             jsonp_pattern = r'\w+\((.*)\)'
             match = re.search(jsonp_pattern, response.text)
             if match:
@@ -388,6 +531,10 @@ class DrcomLogin:
                     'ip': None
                 }
             
+            # 获取页面配置（包括check_online_method等）
+            self.logger.info("获取服务器配置...")
+            self.get_page_config(local_ip)
+            
             # 构造用户账号（格式：,0,username@isp_code）
             isp_code = DRCOM_CONFIG['isp_mapping'].get(self.isp, 'telecom')
             if isp_code:
@@ -412,6 +559,7 @@ class DrcomLogin:
                 'wlan_user_mac': self.wifi_params['wlan_user_mac'],
                 'wlan_ac_ip': self.wifi_params['wlan_ac_ip'],
                 'wlan_ac_name': self.wifi_params['wlan_ac_name'],
+                'ssid': self.wifi_params['ssid'],  # 添加SSID参数
                 'jsVersion': DRCOM_CONFIG['js_version'],
                 'terminal_type': DRCOM_CONFIG['terminal_type'],
                 'lang': 'zh-cn',
@@ -454,7 +602,7 @@ class DrcomLogin:
                         for attempt in range(1, 11):
                             try:
                                 time.sleep(2)  # 等待2秒让网络建立
-                                status = self.check_network_status()
+                                status = self.check_network_status(local_ip)
                                 
                                 if status['online']:
                                     self.logger.info(f"✓ 在线状态确认成功 (第{attempt}次尝试)")
