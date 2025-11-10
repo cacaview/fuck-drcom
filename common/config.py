@@ -37,7 +37,7 @@ DRCOM_CONFIG = {
 # 登录重试配置
 RETRY_CONFIG = {
     'max_retries': 5,       # 最大重试次数
-    'retry_delay': 30,      # 重试延迟（秒）
+    'retry_delay': 15,      # 重试延迟（秒）
     'ping_timeout': 5,      # ping超时时间（秒）
     'test_url': 'www.bing.com',  # 测试网络连通性的地址
 }
@@ -46,7 +46,7 @@ RETRY_CONFIG = {
 VPN_CONFIG = {
     'server_port': 8888,    # VPN服务端口
     'local_proxy_port': 1080,  # 客户端本地SOCKS5代理端口
-    'heartbeat_interval': 30,  # 心跳间隔（秒）
+    'heartbeat_interval': 15,  # 心跳间隔（秒）
     'buffer_size': 8192,    # 缓冲区大小
     'connection_timeout': 10,  # 连接超时（秒）
     'socks5_enabled': True,  # 启用SOCKS5代理（真实流量转发）

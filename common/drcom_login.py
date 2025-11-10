@@ -101,7 +101,7 @@ class DrcomLogin:
                     self.logger.debug(f"响应状态码: {response.status_code}")
                     
                     # 检查是否有重定向
-                    if response.status_code in [301, 302, 303, 307, 308]:
+                    if response.status_code in [151, 152, 153, 157, 158]:
                         redirect_url = response.headers.get('Location', '')
                         self.logger.debug(f"检测到重定向: {redirect_url}")
                         

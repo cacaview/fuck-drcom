@@ -1,0 +1,63 @@
+# Dr.COM 自动认证服务 - systemd 单元文件
+# 安装方法:
+#   1. 复制到 /etc/systemd/system/drcom-auth.service
+#   2. 修改WorkingDirectory和ExecStart路径
+#   3. sudo systemctl daemon-reload
+#   4. sudo systemctl enable drcom-auth
+#   5. sudo systemctl start drcom-auth
+
+[Unit]
+Description=Dr.COM Auto Authentication Service
+Documentation=https://github.com/yourusername/drcom
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# 运行用户（建议使用root以访问网络接口）
+User=root
+Group=root
+
+# 工作目录（修改为你的项目路径）
+WorkingDirectory=/opt/drcom
+
+# 启动命令（修改为你的实际路径和配置）
+ExecStart=/usr/bin/python3 /opt/drcom/drcom_auth.py \
+    --config /opt/drcom/config.yaml \
+    --auto-reconnect
+
+# 启动前等待（秒）
+ExecStartPre=/bin/sleep 5
+
+# 停止命令
+ExecStop=/bin/kill -TERM $MAINPID
+
+# 重启策略
+Restart=always
+RestartSec=10
+
+# 资源限制
+# 内存限制（可选）
+# MemoryLimit=256M
+
+# CPU限制（可选）
+# CPUQuota=50%
+
+# 标准输出和错误输出
+StandardOutput=journal
+StandardError=journal
+
+# 日志级别
+SyslogIdentifier=drcom-auth
+
+# 环境变量（可选）
+# Environment="PYTHONUNBUFFERED=1"
+
+# 安全选项（可选，根据需要调整）
+# NoNewPrivileges=true
+# PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+
